@@ -27,9 +27,9 @@ import functools
 if (sys.platform.startswith("win") or sys.platform.startswith("linux")) and ("-i" not in sys.argv) and ("--ipc" not in sys.argv):
     from . import mpv2 as mpv
 else:
-    import ipc_mpv
-import config as cfg
-import gui_utilities
+    from . import ipc_mpv
+from . import config as cfg
+from . import gui_utilities
 
 
 from PySide6.QtWidgets import (

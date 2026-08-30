@@ -9,7 +9,11 @@ A visible "Import model outputs" button in BORIS's observation window. It parses
 - Sample model output: linked in the Notion page; local copy at `C:\Users\naree\Downloads\first5_current_system_boris_2026-08-25-20260828T054112Z-1-001\first5_current_system_boris_2026-08-25\ALL5_CURRENT_PREDICTED_BORIS_FOR_AUDIT.csv` (same folder also has per-video CSVs, `EXPORT_MANIFEST.csv`, `CURRENT_PREDICTION_EVENT_AUDIT.csv`, and `README_CURRENT_SYSTEM.txt`)
 
 ## Setup / run
-- (fill in after M0: exact install + launch commands, pinned version/tag, system deps like mpv)
+- Pinned version/tag: `v9.14` (upstream `olivierfriard/BORIS`'s latest stable tag and PyPI release; this fork's `boris/version.py` already matches it exactly — nothing to bump).
+- Install: `uv sync` (from repo root) — builds an isolated `.venv` with its own Python 3.13, no system/conda Python involved.
+- Launch: `uv run python -m boris`
+- System deps: **PySide6 (Qt for Python)**, not PyQt — installed by `uv sync`. **mpv**: no manual install needed on Windows; BORIS auto-downloads `libmpv-2.dll` into `boris/misc/` on first run. On Linux it isn't auto-fetched — install manually (`sudo apt install libmpv2` / `sudo dnf install mpv-libs` / `sudo pacman -S mpv`) if that error appears there.
+- Gotcha: don't run via a conda/Anaconda **base** environment that also has PyQt5 installed — the conda `Library\bin` Qt/ICU DLLs conflict with PySide6's own and cause `ImportError: DLL load failed while importing QtCore`. Always use the project's own `.venv` via `uv run`.
 
 ## Rules
 - Nothing hard-coded: read ethogram and subjects from the open project.
