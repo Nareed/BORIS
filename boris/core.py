@@ -210,12 +210,11 @@ class TableModel(QAbstractTableModel):
                     elif column < self.columnCount():
                         return self._data[row][event_idx]
         elif role == Qt.ItemDataRole.BackgroundRole:
-            if not self.stamping_mode_active:
-                return None
             row = index.row()
             if 0 <= row < self.rowCount():
                 subject_idx = cfg.PJ_OBS_FIELDS[self.observation_type][cfg.SUBJECT]
-                return event_stamping.subject_qcolor(self._data[row][subject_idx], self.subject_names)
+                alpha = event_stamping.FADE_ALPHA if self.stamping_mode_active else event_stamping.FADE_ALPHA_OFF
+                return event_stamping.subject_qcolor(self._data[row][subject_idx], self.subject_names, alpha=alpha)
 
 
 class MainWindow(QMainWindow, Ui_MainWindow):

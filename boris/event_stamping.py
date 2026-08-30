@@ -40,6 +40,11 @@ _PALETTE = [
 # events-table coloring and the twSubjects legend get the same muted look
 FADE_ALPHA = 60
 
+# events-table rows use this instead of FADE_ALPHA while stamping mode is off - present ("super
+# super faded"), not gone, so a coder can still tell at a glance who's assigned without the
+# color competing for attention during normal coding
+FADE_ALPHA_OFF = 18
+
 BASE_BUTTON_STYLE = (
     "QToolButton { border: 1px solid palette(mid); border-radius: 4px; padding: 4px 10px; "
     "background-color: palette(button); } "

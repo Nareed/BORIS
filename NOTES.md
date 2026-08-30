@@ -146,6 +146,8 @@ Not implemented (explicitly out of scope for M4 per the interview): assign-by-tr
 
 **UI polish from manual testing:** colors were too saturated/prominent, and both toolbuttons rendered as flat text rather than looking like buttons. Fixed: `subject_qcolor(..., alpha=FADE_ALPHA)` now applies a faded alpha (60/255) to every returned color (both the events-table rows and the `twSubjects` legend); row coloring in `TableModel` is now gated behind `stamping_mode_active` entirely (no color at all while the toggle is off, not just fainter); both toolbuttons get an explicit stylesheet (`BASE_BUTTON_STYLE`) so they read as buttons regardless of the active Qt style; the stamping toggle also swaps to `STAMPING_ON_STYLE` (green, bold) and its own text flips between "Stamping mode: ON"/"OFF" via `on_stamping_mode_toggled`, so the on/off state is unambiguous. Toggling mutates the live `TableModel` in place and emits `layoutChanged` rather than a full `load_tw_events()` reload.
 
+**Follow-up:** "gone entirely while off" turned out to be the wrong call - user wanted colors still visible off-mode, just much fainter, not absent. `TableModel.data()` now picks between two alpha tiers (`event_stamping.FADE_ALPHA`=60 when on, `FADE_ALPHA_OFF`=18 when off) instead of returning `None` when off. The `twSubjects` legend is unaffected by the toggle either way (always `FADE_ALPHA`) - it's a static reference, not tied to stamping activity.
+
 ## 8. Test suite — known issues (found while verifying M0/M1, not fixed here)
 
 - **Run tests from inside `tests/`**, matching `tests/Makefile` (`pytest -s -vv`), not from the repo root — several tests use fixture paths relative to `tests/` (e.g. `files/test.boris`) and fail with `FileNotFoundError` otherwise.

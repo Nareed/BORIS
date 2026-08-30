@@ -80,3 +80,11 @@
 **Key files touched:** `boris/event_stamping.py`, `boris/core.py`, `boris/connections.py`, `NOTES.md`.
 
 **Left open:** same as M4 - not yet manually click-tested with these specific changes; assign-by-track is M5; same 36 pre-existing test failures, two stale PyQt5 test files, OQ-1.
+
+## 2026-08-31 — M4 polish follow-up: dim, don't hide, colors when off
+
+**What changed:** user tested and corrected the previous polish pass - colors disappearing entirely while stamping mode is off was wrong; wanted them still visible, just much fainter ("super super faded"). `TableModel.data()` now uses two alpha tiers instead of `None`-when-off: `FADE_ALPHA` (60/255) while on, `FADE_ALPHA_OFF` (18/255) while off. Full suite re-run clean, app launch re-verified.
+
+**Key files touched:** `boris/event_stamping.py`, `boris/core.py`, `NOTES.md`.
+
+**Left open:** not yet manually verified by the user; assign-by-track is M5 (blocked on OQ-1 - see next entry); same 36 pre-existing test failures, two stale PyQt5 test files.
