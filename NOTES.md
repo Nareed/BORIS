@@ -50,7 +50,9 @@ Appending happens in [boris/write_event.py:37](boris/write_event.py:37), `write_
 # write_event.py:120
 subject = event.get(cfg.SUBJECT, self.currentSubject)
 ```
-so a freshly-coded event's subject always falls back to `self.currentSubject`. **For the importer**: build each event dict with `event["subject"]` pre-populated to the resolved CSV/mapped subject name before calling `write_event`, so this line picks it up directly instead of falling back to whatever the UI's current focal subject happens to be — this is exactly the `.get(..., default)` escape hatch import code should use.
+so a freshly-coded event's subject always falls back to `self.currentSubject`.
+
+**⚠ Correction (M2): the importer must NOT call `write_event()`.** Reading the whole function (not just the append lines above) shows it's a complete live-coding state machine, not a plain appender: it infers state open/close by toggling against `util.get_current_states_modifiers_by_subject(...)`, pops up a **modal** `select_modifiers.ModifiersList(...).exec_()` per call whenever the matched behavior has modifiers configured ([write_event.py:278-284](boris/write_event.py:278)), and touches `self.dw_player[0].player...` assuming a live player is attached ([write_event.py:95](boris/write_event.py:95), [write_event.py:266](boris/write_event.py:266)). Calling it in a loop over hundreds of CSV rows would pop up hundreds of dialogs and could crash outright when there's no player. `boris/model_import.py`'s `insert_events()` instead builds rows directly with the exact list shape `write_event` itself uses for a plain "add event" (the same `bisect.insort` calls at [write_event.py:496-505](boris/write_event.py:496)) — `[time, subject, code, modifier, comment]` for LIVE, plus a trailing `cfg.NA` frame-index sentinel for MEDIA (matching `frame_idx = event.get(cfg.FRAME_INDEX, cfg.NA)` at [write_event.py:131](boris/write_event.py:131)) — then does **one** batched `self.load_tw_events(obs_id)` + `self.project_changed()` call at the end instead of one per row.
 
 ## 4. How the ethogram and subject list are read
 
@@ -100,6 +102,18 @@ To add the real button:
 1. Add a `QAction`/`QToolButton` to `self.toolBar` (in `MainWindow.__init__`, [core.py:348-429](boris/core.py:348), following the `tb_export` template — avoids touching Designer-generated `core_ui.py`).
 2. Wire `.triggered` in `connections.connections(self)` ([connections.py:56](boris/connections.py:56), called from [core.py:434](boris/core.py:434)).
 3. Register enable/disable state in `menu_options.update_menu(self)` ([menu_options.py:50](boris/menu_options.py:50)) — gate on "an observation is open" per FR-1, same pattern used for other observation-only actions.
+
+## 7a. M2 — Import happy path (implemented)
+
+Touched/added files (NFR-1):
+- **`boris/model_import.py`** (new) — pure-logic CSV parsing (`parse_csv`), observation-id filtering (`filter_for_observation`), case/whitespace-insensitive behavior matching (`match_behavior_code`), case-insensitive subject matching (`match_subject_name`), behavior-type conflict detection (`detect_type_conflicts`), event-list construction including START/STOP pairing (`build_import_plan`), direct event insertion bypassing `write_event` (`insert_events`, see §3 correction above), and the Qt-facing orchestration entry point `import_model_outputs_activated(self)`.
+- **`boris/import_conflict_dialog.py`** (new) — `TypeConflictDialog(QDialog)`, following the `ModifiersList`-style custom-dialog pattern (§6): shown only when `detect_type_conflicts` finds a behavior whose CSV rows (POINT vs START/STOP) disagree with the project ethogram's own configured type. Added beyond SPEC.md's original M2 scope, per an interview decision this session — see SPEC.md §2 update.
+- **`boris/core.py`** — added `self.tb_import_model_outputs` (`QToolButton`) to `self.toolBar` in `MainWindow.__init__`, following the commented-out `tb_export` precedent (§7); added `model_import` to the package import block; added `QToolButton` to the `PySide6.QtWidgets` import.
+- **`boris/connections.py`** — wired `self.tb_import_model_outputs.clicked.connect(lambda: model_import.import_model_outputs_activated(self))`.
+- **`boris/menu_options.py`** — `self.tb_import_model_outputs.setEnabled(observation_is_active)` in `update_menu()`.
+- **`tests/test_model_import.py`** (new) — unit tests for the parser, ethogram/subject matching, START/STOP pairing, malformed-sequence detection, and type-conflict detection/resolution. No QApplication needed (pure logic only); passes both from the repo root and from `tests/` (see §8 below for why that distinction matters elsewhere in this suite).
+
+M2 scope actually implemented, vs. SPEC.md's original description: case-insensitive auto-match for behaviors/subjects, filter-to-active-observation, overwrite warning, event insertion with subjects filled — **plus** the type-conflict dialog (skip vs. edit-the-ethogram-and-import), which SPEC.md's M2 hadn't originally called out but which came out of this session's interview (recorded in SPEC.md §2 and mirrored to the Notion page). Still deferred to M3: behavior/subject *map-or-add* dialogs for names that differ by more than case/whitespace — an unmatched behavior label is currently just skipped and reported, not offered a mapping prompt.
 
 ## 8. Test suite — known issues (found while verifying M0/M1, not fixed here)
 

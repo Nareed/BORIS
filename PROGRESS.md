@@ -14,3 +14,20 @@
 - Two stale test files (`tests/test_observation_gui.py`, `tests/test_preferences_gui.py`) still import PyQt5 and are currently excluded via `--ignore` rather than updated.
 - OQ-1 (unknown-cat track-ID column name) still unresolved upstream in the spec.
 - M2 (import happy path) not started.
+
+## 2026-08-30 — Spec interview + M2: import happy path
+
+**What changed:**
+- Interviewed on four implementation-level gaps the Notion spec didn't cover; wrote `SPEC.md` (track ID deferred entirely to M5, subject colors hash-derived from name, fast-assignment UI built into the existing events table, active-subject key reuses `self.currentSubject`). Mirrored to the Notion page (OQ-9/10/11, Progress log).
+- Implemented M2: "Import model outputs" `QToolButton` on the always-visible toolbar (enabled only while an observation is open); file picker; parses the BORIS tabular events CSV; filters to the active observation's rows; case-insensitive auto-match for behaviors and subjects; overwrite confirmation when the observation already has events; a new `TypeConflictDialog` (per-behavior skip-vs-use-CSV-type choice) for when the CSV's START/STOP-vs-POINT disagrees with the ethogram — a decision added this session, not in the original spec; direct event insertion (see correction below); a summary dialog reporting imported/skipped/subject-free counts.
+- **Correction to M1's own NOTES.md**: `write_event()` turns out to be a full live-coding state machine (state-toggle inference, a modal modifier dialog per call, assumes a live player) — unsafe to call in a bulk-import loop. Verified by reading the whole function, not just the append lines. The importer builds event rows directly instead, matching `write_event`'s own list shape via `bisect.insort`, with one batched UI refresh at the end.
+- Added `tests/test_model_import.py`: 16 unit tests for CSV parsing, ethogram/subject matching, START/STOP pairing, malformed-sequence detection, and type-conflict detection/resolution — all pass, no QApplication needed. Full suite re-run: still exactly the same 36 pre-existing failures, no regressions.
+- Launched the app to confirm the new button doesn't crash startup; actual click-through/import/visual verification is left to the user (no native-GUI automation tool available on this side).
+
+**Key files touched:** `SPEC.md`, `NOTES.md`, `boris/model_import.py` (new), `boris/import_conflict_dialog.py` (new), `boris/core.py`, `boris/connections.py`, `boris/menu_options.py`, `tests/test_model_import.py` (new).
+
+**Left open:**
+- User still needs to manually try the import in the running app (button click, file picker, verify events render/save) — not yet confirmed end-to-end by a human.
+- M3 (behavior/subject map-or-add for non-case/whitespace mismatches) not started — currently those rows are just skipped and reported.
+- `test-projects.boris` has zero observations; needs one created (matching the sample CSV's `Observation id`, e.g. `P26_20231010_FIT`) before the sample CSV can actually be imported into it.
+- 36 pre-existing test failures and the two stale PyQt5 test files, same as M0-M1.

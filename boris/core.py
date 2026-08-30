@@ -71,6 +71,7 @@ from PySide6.QtWidgets import (
     QSplashScreen,
     QStyledItemDelegate,
     QTableWidgetItem,
+    QToolButton,
 )
 
 from . import cmd_arguments
@@ -101,6 +102,7 @@ from . import (
     events_cursor,
     geometric_measurement,
     gui_utilities,
+    model_import,
     modifier_coding_map_creator,
     modifiers_coding_map,
     observation_operations,
@@ -373,6 +375,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.add_button_menu(behavior_button_items, self.menu)
         self.tb_export.setMenu(self.menu)
         """
+
+        self.tb_import_model_outputs = QToolButton()
+        self.tb_import_model_outputs.setText("Import model outputs")
+        self.tb_import_model_outputs.setToolTip("Import a BORIS tabular events CSV produced by a detection model")
+        self.tb_import_model_outputs.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.toolBar.addWidget(self.tb_import_model_outputs)
 
         gui_utilities.set_icons(self, theme_mode=gui_utilities.theme_mode())
 

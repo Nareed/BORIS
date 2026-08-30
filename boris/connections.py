@@ -39,6 +39,7 @@ from . import (
     irr,
     latency,
     media_file,
+    model_import,
     observation_operations,
     preferences,
     project_functions,
@@ -93,6 +94,8 @@ def connections(self):
 
     self.action_create_observations.triggered.connect(lambda: observation_operations.create_observations(self))
     self.actionRemove_observations.triggered.connect(lambda: observation_operations.remove_observations(self))
+
+    self.tb_import_model_outputs.clicked.connect(lambda: model_import.import_model_outputs_activated(self))
 
     self.actionAdd_event.triggered.connect(lambda: event_operations.add_event(self))
     self.actionEdit_event.triggered.connect(lambda: event_operations.edit_event(self))
