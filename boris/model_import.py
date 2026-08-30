@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal as dec
 from pathlib import Path
 
-from PySide6.QtWidgets import QFileDialog, QMessageBox
+from PySide6.QtWidgets import QFileDialog, QInputDialog, QMessageBox
 
 from . import config as cfg
 from . import import_conflict_dialog
@@ -118,6 +118,14 @@ def parse_csv(csv_path: Path) -> list:
 
 def filter_for_observation(rows: list, observation_id: str) -> list:
     return [r for r in rows if r.observation_id == observation_id]
+
+
+def distinct_observation_ids(rows: list) -> list:
+    """Distinct 'Observation id' values, in order of first appearance."""
+    seen: dict = {}
+    for r in rows:
+        seen.setdefault(r.observation_id, None)
+    return list(seen)
 
 
 def match_behavior_code(label: str, ethogram: dict) -> str | None:
@@ -293,12 +301,27 @@ def import_model_outputs_activated(self) -> None:
 
     rows = filter_for_observation(all_rows, self.observationId)
     if not rows:
-        QMessageBox.warning(
+        candidate_ids = distinct_observation_ids(all_rows)
+        if not candidate_ids:
+            QMessageBox.warning(self, cfg.programName, "This CSV has no rows with an Observation id.")
+            return
+
+        # BORIS observation names and the model pipeline's own "Observation id" values are
+        # independent naming schemes (a coder might name an observation after the video file,
+        # while the CSV uses e.g. "P26_20231010_FIT") - they won't coincidentally match, so let
+        # the coder pick the right one from what's actually in the file instead of erroring out.
+        chosen, ok = QInputDialog.getItem(
             self,
             cfg.programName,
-            f"No rows in this CSV match the active observation id ({self.observationId!r}).",
+            f"No rows match the active observation's id ({self.observationId!r}).\n"
+            "Pick the Observation id to import from this CSV instead:",
+            candidate_ids,
+            0,
+            False,
         )
-        return
+        if not ok:
+            return
+        rows = filter_for_observation(all_rows, chosen)
 
     existing_events = self.pj[cfg.OBSERVATIONS][self.observationId][cfg.EVENTS]
     if existing_events:

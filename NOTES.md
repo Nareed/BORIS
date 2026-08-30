@@ -115,6 +115,8 @@ Touched/added files (NFR-1):
 
 M2 scope actually implemented, vs. SPEC.md's original description: case-insensitive auto-match for behaviors/subjects, filter-to-active-observation, overwrite warning, event insertion with subjects filled — **plus** the type-conflict dialog (skip vs. edit-the-ethogram-and-import), which SPEC.md's M2 hadn't originally called out but which came out of this session's interview (recorded in SPEC.md §2 and mirrored to the Notion page). Still deferred to M3: behavior/subject *map-or-add* dialogs for names that differ by more than case/whitespace — an unmatched behavior label is currently just skipped and reported, not offered a mapping prompt.
 
+**Fix from manual testing:** the first real click-through (user's own `manual-tests/` project + real CSV + real video) hit `filter_for_observation` returning zero rows, because a BORIS observation's name and the CSV's `Observation id` are independent naming schemes (the user had named the observation after the video file; the CSV used the model pipeline's own id, e.g. `P26_20231010_FIT`) — they will essentially never coincidentally match. FR-10's "or prompt to choose" was already written into SPEC.md but not implemented in the first M2 pass; added `distinct_observation_ids()` + a `QInputDialog.getItem` picker so the coder can pick the right id from what's actually in the file instead of being forced to rename their observation.
+
 ## 8. Test suite — known issues (found while verifying M0/M1, not fixed here)
 
 - **Run tests from inside `tests/`**, matching `tests/Makefile` (`pytest -s -vv`), not from the repo root — several tests use fixture paths relative to `tests/` (e.g. `files/test.boris`) and fail with `FileNotFoundError` otherwise.

@@ -78,6 +78,16 @@ def test_parse_csv_and_filter_by_observation(tmp_path):
     assert mi.filter_for_observation(rows, "obsC_does_not_exist") == []
 
 
+def test_distinct_observation_ids_preserves_first_seen_order():
+    csv_path_rows = [
+        mi.ParsedRow("obsB", "Odin", "Lick", "POINT", dec("1.000"), ""),
+        mi.ParsedRow("obsA", "Odin", "Lick", "POINT", dec("2.000"), ""),
+        mi.ParsedRow("obsB", "Odin", "Lick", "POINT", dec("3.000"), ""),
+    ]
+    assert mi.distinct_observation_ids(csv_path_rows) == ["obsB", "obsA"]
+    assert mi.distinct_observation_ids([]) == []
+
+
 def test_parse_csv_missing_required_column(tmp_path):
     csv_path = tmp_path / "bad.csv"
     csv_path.write_text("Foo,Bar\n1,2\n", encoding="utf-8")
