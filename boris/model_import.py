@@ -184,6 +184,16 @@ def apply_subject_mapping(rows: list, mapping: dict) -> None:
             r.subject_raw = mapping[r.subject_raw]
 
 
+def auto_matched_behavior_codes(rows: list, ethogram: dict) -> list:
+    """Distinct ethogram codes that CSV rows matched cleanly (no mapping needed), sorted."""
+    return sorted({code for r in rows if (code := match_behavior_code(r.behavior_raw, ethogram)) is not None})
+
+
+def auto_matched_subject_names(rows: list, subjects: dict) -> list:
+    """Distinct project subject names that CSV rows matched cleanly (no mapping needed), sorted."""
+    return sorted({name for r in rows if r.subject_raw and (name := match_subject_name(r.subject_raw, subjects)) is not None})
+
+
 def ethogram_type_category(ethogram_type: str) -> str:
     """Map an ethogram entry's "type" field to "STATE" or "POINT"."""
     if ethogram_type in cfg.STATE_EVENT_TYPES:
@@ -323,16 +333,20 @@ def _next_pj_key(pj_dict: dict) -> str:
 
 def apply_behavior_resolutions(self, resolutions: dict, rows: list) -> dict:
     """
-    resolutions: {raw_label: ("map", existing_code) | ("add", new_code)}.
+    resolutions: {raw_label: ("map", existing_code) | ("add", new_code) | ("skip", None)}.
     For "add", reuses an already-added code if a previous "add" in this same batch (or the
     project itself) already has it - this is how two different CSV labels can be merged into one
     new behavior (many-to-one), just by typing the same new name for both in the dialog.
+    "skip" is left out of the returned mapping entirely, so the label stays unmatched and falls
+    through to build_import_plan()'s existing "unknown behavior" skip-and-report path.
     Returns {raw_label: resolved_code}, ready for apply_behavior_mapping().
     """
     mapping: dict = {}
     added_this_batch: set = set()
     changed = False
     for raw_label, (action, target) in resolutions.items():
+        if action == "skip":
+            continue
         if action == "map":
             mapping[raw_label] = target
             continue
@@ -365,11 +379,15 @@ def apply_behavior_resolutions(self, resolutions: dict, rows: list) -> dict:
 
 
 def apply_subject_resolutions(self, resolutions: dict) -> dict:
-    """Same idea as apply_behavior_resolutions(), for self.pj[cfg.SUBJECTS]."""
+    """Same idea as apply_behavior_resolutions(), for self.pj[cfg.SUBJECTS]. "skip" leaves the raw
+    name out of the mapping, so it stays unmatched and build_import_plan() loads it subject-free
+    (FR-5), same as if it had never been offered a mapping choice at all."""
     mapping: dict = {}
     added_this_batch: set = set()
     changed = False
     for raw_name, (action, target) in resolutions.items():
+        if action == "skip":
+            continue
         if action == "map":
             mapping[raw_name] = target
             continue
@@ -441,8 +459,14 @@ def import_model_outputs_activated(self) -> None:
         if answer != QMessageBox.StandardButton.Yes:
             return
 
+    # captured before any mapping dialog runs, so this reflects what auto-matched cleanly on its
+    # own - reassurance that "everything else is fine", not just a report of what needed help
+    auto_matched_behaviors = auto_matched_behavior_codes(rows, self.pj[cfg.ETHOGRAM])
+    auto_matched_subjects = auto_matched_subject_names(rows, self.pj[cfg.SUBJECTS])
+
     behaviors_added: list = []
     behaviors_mapped: list = []
+    behaviors_skipped: list = []
     unmatched_behaviors = unmatched_behavior_labels(rows, self.pj[cfg.ETHOGRAM])
     if unmatched_behaviors:
         dlg = import_mapping_dialog.MappingDialog(
@@ -454,10 +478,16 @@ def import_model_outputs_activated(self) -> None:
         mapping = apply_behavior_resolutions(self, behavior_resolutions, rows)
         apply_behavior_mapping(rows, mapping)
         for raw_label, (action, target) in behavior_resolutions.items():
-            (behaviors_added if action == "add" else behaviors_mapped).append(f"{raw_label!r} -> {mapping[raw_label]!r}")
+            if action == "skip":
+                behaviors_skipped.append(raw_label)
+            elif action == "add":
+                behaviors_added.append(f"{raw_label!r} -> {mapping[raw_label]!r}")
+            else:
+                behaviors_mapped.append(f"{raw_label!r} -> {mapping[raw_label]!r}")
 
     subjects_added: list = []
     subjects_mapped: list = []
+    subjects_skipped: list = []
     unmatched_subjects = unmatched_subject_names(rows, self.pj[cfg.SUBJECTS])
     if unmatched_subjects:
         dlg = import_mapping_dialog.MappingDialog(
@@ -469,7 +499,12 @@ def import_model_outputs_activated(self) -> None:
         mapping = apply_subject_resolutions(self, subject_resolutions)
         apply_subject_mapping(rows, mapping)
         for raw_name, (action, target) in subject_resolutions.items():
-            (subjects_added if action == "add" else subjects_mapped).append(f"{raw_name!r} -> {mapping[raw_name]!r}")
+            if action == "skip":
+                subjects_skipped.append(raw_name)
+            elif action == "add":
+                subjects_added.append(f"{raw_name!r} -> {mapping[raw_name]!r}")
+            else:
+                subjects_mapped.append(f"{raw_name!r} -> {mapping[raw_name]!r}")
 
     ethogram = self.pj[cfg.ETHOGRAM]
     subjects = self.pj[cfg.SUBJECTS]
@@ -494,6 +529,10 @@ def import_model_outputs_activated(self) -> None:
         return
 
     summary = [f"Imported {len(plan.events)} event(s)."]
+    if auto_matched_behaviors:
+        summary.append(f"Auto-matched cleanly - behaviors: {', '.join(auto_matched_behaviors)}.")
+    if auto_matched_subjects:
+        summary.append(f"Auto-matched cleanly - subjects: {', '.join(auto_matched_subjects)}.")
     if plan.subject_free_count:
         summary.append(f"{plan.subject_free_count} loaded without a subject (no matching cat name in the CSV).")
     if ethogram_changed:
@@ -502,10 +541,14 @@ def import_model_outputs_activated(self) -> None:
         summary.append(f"Added {len(behaviors_added)} new behavior(s): {', '.join(behaviors_added)}.")
     if behaviors_mapped:
         summary.append(f"Mapped {len(behaviors_mapped)} behavior label(s): {', '.join(behaviors_mapped)}.")
+    if behaviors_skipped:
+        summary.append(f"Skipped {len(behaviors_skipped)} behavior label(s) (rows dropped): {', '.join(behaviors_skipped)}.")
     if subjects_added:
         summary.append(f"Added {len(subjects_added)} new subject(s): {', '.join(subjects_added)}.")
     if subjects_mapped:
         summary.append(f"Mapped {len(subjects_mapped)} subject name(s): {', '.join(subjects_mapped)}.")
+    if subjects_skipped:
+        summary.append(f"Skipped {len(subjects_skipped)} subject name(s) (loaded subject-free): {', '.join(subjects_skipped)}.")
     if plan.skipped:
         summary.append(f"Skipped {len(plan.skipped)} row(s):")
         for skipped in plan.skipped[:10]:

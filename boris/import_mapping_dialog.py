@@ -36,15 +36,21 @@ from PySide6.QtWidgets import (
 
 from . import config as cfg
 
+SKIP = "-- Skip (leave unresolved) --"
 ADD_NEW = "-- Add as new --"
 
 
 class MappingDialog(QDialog):
     """
     Reusable map-or-add dialog for both behavior and subject mismatches (FR-4, FR-5): one row per
-    unmatched CSV label, each either mapped to an existing project item or added as a new one.
+    unmatched CSV label, each mapped to an existing project item, added as a new one, or skipped.
     Many-to-one is free - several labels can pick the same existing item, or type the same "new"
     name to be merged into one new item (see model_import.apply_*_resolutions).
+
+    Skip is the default for every row (not "add as new"): declining to resolve a label should
+    never silently mutate the project just because the coder didn't touch a row. A skipped
+    behavior label is dropped (its rows are excluded, same as an unmatched label in M2); a skipped
+    subject name loads subject-free, per FR-5.
     """
 
     def __init__(self, kind: str, unmatched_labels: list, existing_items: list):
@@ -54,11 +60,12 @@ class MappingDialog(QDialog):
         self._rows: dict = {}
 
         noun = "behavior" if kind == "behavior" else "subject"
+        skip_consequence = "those rows are dropped" if kind == "behavior" else "those events load without a subject"
         layout = QVBoxLayout()
         layout.addWidget(
             QLabel(
                 f"The CSV has {noun} label(s) that don't match this project (beyond case/whitespace).\n"
-                f"For each one, map it to an existing {noun} or add it as new:"
+                f"For each one: map it to an existing {noun}, add it as new, or skip it ({skip_consequence})."
             )
         )
 
@@ -73,11 +80,13 @@ class MappingDialog(QDialog):
             row_layout.addWidget(QLabel(f"<b>{label}</b>"))
 
             combo = QComboBox()
+            combo.addItem(SKIP)
             combo.addItem(ADD_NEW)
             combo.addItems(sorted_items)
             row_layout.addWidget(combo)
 
             new_name_edit = QLineEdit(label)
+            new_name_edit.setEnabled(False)
             row_layout.addWidget(new_name_edit)
 
             def _on_change(index, combo=combo, new_name_edit=new_name_edit):
@@ -108,10 +117,12 @@ class MappingDialog(QDialog):
         self.resize(500, min(80 + 60 * len(unmatched_labels), 600))
 
     def get_resolutions(self) -> dict:
-        """{raw_label: ("map", existing_item) | ("add", new_name)}"""
+        """{raw_label: ("map", existing_item) | ("add", new_name) | ("skip", None)}"""
         resolutions = {}
         for label, (combo, new_name_edit) in self._rows.items():
-            if combo.currentText() == ADD_NEW:
+            if combo.currentText() == SKIP:
+                resolutions[label] = ("skip", None)
+            elif combo.currentText() == ADD_NEW:
                 resolutions[label] = ("add", new_name_edit.text().strip() or label)
             else:
                 resolutions[label] = ("map", combo.currentText())

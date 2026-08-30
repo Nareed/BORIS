@@ -282,6 +282,45 @@ def test_apply_subject_resolutions_add_and_many_to_one():
     assert len(added) == 1
 
 
+def test_auto_matched_behavior_codes_and_subject_names():
+    rows = [
+        _row("Odin", "Sniff food outside", "START", "1.0"),
+        _row("Odin", "Sniff food outside", "STOP", "2.0"),
+        _row("Oliver", "Lick", "POINT", "3.0"),
+        _row("Pagaille", "Zoomies", "POINT", "4.0"),  # neither behavior nor subject match
+    ]
+    assert mi.auto_matched_behavior_codes(rows, ETHOGRAM) == ["Lick", "Sniff food outside"]
+    assert mi.auto_matched_subject_names(rows, SUBJECTS) == ["Odin", "Oliver"]
+
+
+def test_apply_behavior_resolutions_skip_leaves_project_and_mapping_untouched():
+    fake = _FakeMainWindow(ETHOGRAM, SUBJECTS)
+    rows = [_row("Odin", "Zoomies", "POINT", "1.0")]
+    mapping = mi.apply_behavior_resolutions(fake, {"Zoomies": ("skip", None)}, rows)
+    assert mapping == {}
+    assert len(fake.pj[cfg.ETHOGRAM]) == len(ETHOGRAM)  # nothing added
+
+    # unmapped, so the normal M2 "unknown behavior" skip-and-report path still catches it
+    mi.apply_behavior_mapping(rows, mapping)
+    result = mi.build_import_plan(rows, fake.pj[cfg.ETHOGRAM], fake.pj[cfg.SUBJECTS])
+    assert result.events == []
+    assert "Unknown behavior" in result.skipped[0].reason
+
+
+def test_apply_subject_resolutions_skip_loads_subject_free():
+    fake = _FakeMainWindow(ETHOGRAM, SUBJECTS)
+    rows = [_row("Simba", "Lick", "POINT", "1.0")]
+    mapping = mi.apply_subject_resolutions(fake, {"Simba": ("skip", None)})
+    assert mapping == {}
+    assert len(fake.pj[cfg.SUBJECTS]) == len(SUBJECTS)  # nothing added
+
+    mi.apply_subject_mapping(rows, mapping)
+    result = mi.build_import_plan(rows, fake.pj[cfg.ETHOGRAM], fake.pj[cfg.SUBJECTS])
+    assert result.events == [[dec("1.000"), "", "Lick", "", ""]]  # subject-free, not dropped
+    assert result.subject_free_count == 1
+    assert result.skipped == []
+
+
 def test_build_import_plan_use_csv_resolution_keeps_conflicting_rows():
     # caller is expected to have already updated the ethogram's type for "use_csv";
     # build_import_plan itself just stops skipping and pairs by the CSV's own markers

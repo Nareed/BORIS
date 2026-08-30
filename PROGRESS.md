@@ -48,3 +48,15 @@
 - M3's dialogs haven't been manually click-tested by the user yet (unit-tested only).
 - M4 (fast subject assignment UX) not started.
 - Same 36 pre-existing test failures, two stale PyQt5 test files, and OQ-1 (track-ID column) as before.
+
+## 2026-08-30 — M3 user-verified + skip option + auto-match reporting
+
+**What changed:**
+- User manually tested M3's map-to-existing and add-as-new paths against a purpose-built CSV (`manual-tests/files/mapping-test.csv`, not committed) - both work.
+- Added a third "Skip" option to `MappingDialog`, and made it the *default* (previously defaulted to "Add as new" pre-filled with the raw label, meaning an untouched row would silently mutate the project). Skip for a behavior drops those rows (same as M2's original unmatched-behavior path); skip for a subject loads it subject-free (FR-5). No changes needed to `build_import_plan()` - a skipped label is just left out of the mapping dict, so it falls straight into logic that already existed.
+- Added `auto_matched_behavior_codes()`/`auto_matched_subject_names()`: the summary dialog now leads with what matched cleanly on its own, not just problems that needed a dialog.
+- 3 new unit tests (27 total), full suite re-run clean, app launch re-verified.
+
+**Key files touched:** `boris/import_mapping_dialog.py`, `boris/model_import.py`, `NOTES.md`, `SPEC.md`.
+
+**Left open:** same as before - M4 not started; 36 pre-existing test failures, two stale PyQt5 test files, OQ-1.
