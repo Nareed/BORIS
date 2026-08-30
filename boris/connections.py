@@ -30,6 +30,7 @@ from . import (
     coding_pad,
     cooccurence,
     event_operations,
+    event_stamping,
     events_snapshots,
     export_events,
     external_processes,
@@ -271,7 +272,8 @@ def connections(self):
     self.twSubjects.itemDoubleClicked.connect(self.twSubjects_doubleClicked)
 
     # events tableview
-    self.tv_events.doubleClicked.connect(self.tv_events_doubleClicked)
+    self.tv_events.doubleClicked.connect(lambda: event_stamping.on_tv_events_double_clicked(self))
+    self.tv_events.clicked.connect(lambda: event_stamping.on_tv_events_clicked(self))
 
     # Actions for twEthogram context menu
     self.twEthogram.setContextMenuPolicy(Qt.ContextMenuPolicy.ActionsContextMenu)

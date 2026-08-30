@@ -60,3 +60,15 @@
 **Key files touched:** `boris/import_mapping_dialog.py`, `boris/model_import.py`, `NOTES.md`, `SPEC.md`.
 
 **Left open:** same as before - M4 not started; 36 pre-existing test failures, two stale PyQt5 test files, OQ-1.
+
+## 2026-08-30 — M4: fast subject assignment
+
+**What changed:**
+- Before implementing, found that `tv_events` already uses plain click (row selection, read by Edit event/Delete/Copy) and double-click (seeks the video to that event's time). The original plan to use those directly for stamp/unassign would have silently misfired during ordinary live coding, since the reused "active subject" state (`self.currentSubject`) is commonly set outside of import review too. Flagged to the user before writing code; resolved with a checkable "Stamping mode" toolbar toggle, default off - `tv_events` is unchanged from before this feature while it's off.
+- Built the stamping logic (`boris/event_stamping.py`): click stamps the selected row(s) with the focal subject when the toggle is on; double-click unassigns; both fall through to original behavior when the toggle is off. `TableModel` now paints every row with a subject in that subject's color (live-coded or imported, not just imported). The existing `twSubjects` dock doubles as the color legend (reused, not a new widget).
+- Second correction, this one caught by a test rather than inspection: subject colors were originally independent-hashed per name, which a test showed collides badly (only 6 distinct colors for 10 real project subjects). Fixed to rank subjects by position in the project's own subject list instead, guaranteeing distinct colors within one project.
+- 6 new unit tests (33 total across the importer + stamping), full suite re-run clean, app launch re-verified.
+
+**Key files touched:** `boris/event_stamping.py` (new), `boris/core.py`, `boris/connections.py`, `boris/menu_options.py`, `tests/test_event_stamping.py` (new), `NOTES.md`, `SPEC.md`.
+
+**Left open:** not yet manually click-tested by the user; assign-by-track is M5; same 36 pre-existing test failures, two stale PyQt5 test files, OQ-1 as before.

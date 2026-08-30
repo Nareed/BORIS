@@ -99,6 +99,7 @@ from . import (
     core_qrc,
     dialog,
     event_operations,
+    event_stamping,
     events_cursor,
     geometric_measurement,
     gui_utilities,
@@ -170,12 +171,13 @@ class TableModel(QAbstractTableModel):
     class for populating table view with events
     """
 
-    def __init__(self, data, header: list, time_format: str, observation_type: str, parent=None):
+    def __init__(self, data, header: list, time_format: str, observation_type: str, subject_names=None, parent=None):
         super(TableModel, self).__init__(parent)
         self._data = data
         self.header = header
         self.time_format = time_format
         self.observation_type = observation_type
+        self.subject_names = subject_names or []
 
     def headerData(self, section: int, orientation: Qt.Orientation, role: int):
         if role == Qt.ItemDataRole.DisplayRole:
@@ -204,6 +206,11 @@ class TableModel(QAbstractTableModel):
                         return util.convertTime(self.time_format, self._data[row][event_idx])
                     elif column < self.columnCount():
                         return self._data[row][event_idx]
+        elif role == Qt.ItemDataRole.BackgroundRole:
+            row = index.row()
+            if 0 <= row < self.rowCount():
+                subject_idx = cfg.PJ_OBS_FIELDS[self.observation_type][cfg.SUBJECT]
+                return event_stamping.subject_qcolor(self._data[row][subject_idx], self.subject_names)
 
 
 class MainWindow(QMainWindow, Ui_MainWindow):
@@ -381,6 +388,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.tb_import_model_outputs.setToolTip("Import a BORIS tabular events CSV produced by a detection model")
         self.tb_import_model_outputs.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.toolBar.addWidget(self.tb_import_model_outputs)
+
+        self.tb_stamping_mode = QToolButton()
+        self.tb_stamping_mode.setText("Stamping mode")
+        self.tb_stamping_mode.setCheckable(True)
+        self.tb_stamping_mode.setToolTip(
+            "While on: click an event (or a multi-selection) to assign it to the focal subject; "
+            "double-click to unassign. While off, the events table behaves as usual "
+            "(click selects, double-click seeks the video)."
+        )
+        self.tb_stamping_mode.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.toolBar.addWidget(self.tb_stamping_mode)
 
         gui_utilities.set_icons(self, theme_mode=gui_utilities.theme_mode())
 
@@ -2311,6 +2329,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             header,
             time_format,
             self.playerType,
+            [entry[cfg.SUBJECT_NAME] for entry in self.pj[cfg.SUBJECTS].values()],
             self.tv_events,
         )
         self.tv_events.setModel(model)
@@ -4527,6 +4546,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                         len(cfg.subjectsFields),
                         QTableWidgetItem(""),
                     )
+
+        # color legend for the fast subject-assignment feature (SPEC.md §7)
+        event_stamping.colorize_subjects_table(self)
 
     # def update_events_start_stop(self) -> None:
     #    """
