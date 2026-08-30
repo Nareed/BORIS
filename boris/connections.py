@@ -97,6 +97,7 @@ def connections(self):
     self.actionRemove_observations.triggered.connect(lambda: observation_operations.remove_observations(self))
 
     self.tb_import_model_outputs.clicked.connect(lambda: model_import.import_model_outputs_activated(self))
+    self.tb_stamping_mode.toggled.connect(lambda checked: event_stamping.on_stamping_mode_toggled(self, checked))
 
     self.actionAdd_event.triggered.connect(lambda: event_operations.add_event(self))
     self.actionEdit_event.triggered.connect(lambda: event_operations.edit_event(self))

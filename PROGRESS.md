@@ -72,3 +72,11 @@
 **Key files touched:** `boris/event_stamping.py` (new), `boris/core.py`, `boris/connections.py`, `boris/menu_options.py`, `tests/test_event_stamping.py` (new), `NOTES.md`, `SPEC.md`.
 
 **Left open:** not yet manually click-tested by the user; assign-by-track is M5; same 36 pre-existing test failures, two stale PyQt5 test files, OQ-1 as before.
+
+## 2026-08-30 — M4 polish: faded colors, gated on toggle, real buttons
+
+**What changed:** user tested M4 and gave feedback - colors too saturated, toolbuttons looked like flat text not buttons, toggle needed a clear on/off indicator, colors should disappear (not just fade) when stamping mode is off. All four addressed: `subject_qcolor()` now applies a faded alpha (60/255) everywhere it's used; row coloring in `TableModel` is fully gated behind the toggle's state (no color at all while off); both toolbuttons get an explicit stylesheet so they render as buttons under any Qt style; the toggle swaps to a bold green style and its text flips between "Stamping mode: ON"/"OFF". Full suite re-run clean, app launch re-verified.
+
+**Key files touched:** `boris/event_stamping.py`, `boris/core.py`, `boris/connections.py`, `NOTES.md`.
+
+**Left open:** same as M4 - not yet manually click-tested with these specific changes; assign-by-track is M5; same 36 pre-existing test failures, two stale PyQt5 test files, OQ-1.

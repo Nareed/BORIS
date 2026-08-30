@@ -36,6 +36,24 @@ _PALETTE = [
     "#808000", "#ffd8b1", "#000075",
 ]  # fmt: skip
 
+# out of 255 - "faded", not the solid palette color; applied by subject_qcolor() so both the
+# events-table coloring and the twSubjects legend get the same muted look
+FADE_ALPHA = 60
+
+BASE_BUTTON_STYLE = (
+    "QToolButton { border: 1px solid palette(mid); border-radius: 4px; padding: 4px 10px; "
+    "background-color: palette(button); } "
+    "QToolButton:hover { background-color: palette(light); } "
+    "QToolButton:pressed { background-color: palette(dark); }"
+)
+
+STAMPING_ON_STYLE = (
+    "QToolButton { border: 2px solid #1b5e20; border-radius: 4px; padding: 4px 10px; "
+    "background-color: #43a047; color: white; font-weight: bold; } "
+    "QToolButton:hover { background-color: #4caf50; } "
+    "QToolButton:pressed { background-color: #2e7d32; }"
+)
+
 
 def subject_color(name: str, subject_names) -> str:
     """
@@ -63,10 +81,14 @@ def subject_color(name: str, subject_names) -> str:
     return _PALETTE[index % len(_PALETTE)]
 
 
-def subject_qcolor(name: str, subject_names):
-    """subject_color() as a QColor, or None for a blank name."""
+def subject_qcolor(name: str, subject_names, alpha: int = FADE_ALPHA):
+    """subject_color() as a faded QColor (see FADE_ALPHA), or None for a blank name."""
     hex_color = subject_color(name, subject_names)
-    return QColor(hex_color) if hex_color else None
+    if not hex_color:
+        return None
+    color = QColor(hex_color)
+    color.setAlpha(alpha)
+    return color
 
 
 def colorize_subjects_table(self) -> None:
@@ -89,6 +111,22 @@ def colorize_subjects_table(self) -> None:
             item = self.twSubjects.item(row, col)
             if item is not None:
                 item.setBackground(color)
+
+
+def on_stamping_mode_toggled(self, checked: bool) -> None:
+    """
+    Make the toggle's on/off state unmistakable (text + a distinct green style when on), and
+    gate the events-table row coloring behind it: colors are only shown while stamping mode is
+    on (TableModel.stamping_mode_active), so tv_events isn't tinted at all during normal coding.
+    Mutates the live model in place and forces a repaint rather than rebuilding it - toggling the
+    mode shouldn't need a full reload_tw_events().
+    """
+    self.tb_stamping_mode.setText(f"Stamping mode: {'ON' if checked else 'OFF'}")
+    self.tb_stamping_mode.setStyleSheet(STAMPING_ON_STYLE if checked else BASE_BUTTON_STYLE)
+    model = self.tv_events.model()
+    if model is not None:
+        model.stamping_mode_active = checked
+        model.layoutChanged.emit()
 
 
 def _apply_subject_to_selected_rows(self, subject: str) -> None:
