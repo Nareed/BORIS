@@ -31,6 +31,7 @@ from PySide6.QtWidgets import QFileDialog, QInputDialog, QMessageBox
 
 from . import config as cfg
 from . import import_conflict_dialog
+from . import import_mapping_dialog
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +149,39 @@ def match_subject_name(name: str, subjects: dict) -> str | None:
         if str(entry[cfg.SUBJECT_NAME]).casefold() == normalized:
             return entry[cfg.SUBJECT_NAME]
     return None
+
+
+def unmatched_behavior_labels(rows: list, ethogram: dict) -> list:
+    """Distinct raw Behavior labels with no ethogram match, in order of first appearance."""
+    seen: dict = {}
+    for r in rows:
+        if match_behavior_code(r.behavior_raw, ethogram) is None:
+            seen.setdefault(r.behavior_raw, None)
+    return list(seen)
+
+
+def unmatched_subject_names(rows: list, subjects: dict) -> list:
+    """Distinct raw (non-blank) Subject names with no project match, in order of first appearance."""
+    seen: dict = {}
+    for r in rows:
+        if r.subject_raw and match_subject_name(r.subject_raw, subjects) is None:
+            seen.setdefault(r.subject_raw, None)
+    return list(seen)
+
+
+def apply_behavior_mapping(rows: list, mapping: dict) -> None:
+    """Rewrite rows in place: raw_label -> resolved project ethogram code, for previously-unmatched
+    labels. After this, match_behavior_code(r.behavior_raw, ethogram) succeeds for every row."""
+    for r in rows:
+        if r.behavior_raw in mapping:
+            r.behavior_raw = mapping[r.behavior_raw]
+
+
+def apply_subject_mapping(rows: list, mapping: dict) -> None:
+    """Same as apply_behavior_mapping, for subjects."""
+    for r in rows:
+        if r.subject_raw in mapping:
+            r.subject_raw = mapping[r.subject_raw]
 
 
 def ethogram_type_category(ethogram_type: str) -> str:
@@ -283,6 +317,78 @@ def _apply_use_csv_resolutions(self, conflicts: dict, resolutions: dict) -> list
     return changed
 
 
+def _next_pj_key(pj_dict: dict) -> str:
+    return str(max((int(k) for k in pj_dict), default=-1) + 1)
+
+
+def apply_behavior_resolutions(self, resolutions: dict, rows: list) -> dict:
+    """
+    resolutions: {raw_label: ("map", existing_code) | ("add", new_code)}.
+    For "add", reuses an already-added code if a previous "add" in this same batch (or the
+    project itself) already has it - this is how two different CSV labels can be merged into one
+    new behavior (many-to-one), just by typing the same new name for both in the dialog.
+    Returns {raw_label: resolved_code}, ready for apply_behavior_mapping().
+    """
+    mapping: dict = {}
+    added_this_batch: set = set()
+    changed = False
+    for raw_label, (action, target) in resolutions.items():
+        if action == "map":
+            mapping[raw_label] = target
+            continue
+
+        existing = match_behavior_code(target, self.pj[cfg.ETHOGRAM])
+        if existing is not None or target in added_this_batch:
+            mapping[raw_label] = existing or target
+            continue
+
+        first_row = next(r for r in rows if r.behavior_raw == raw_label)
+        new_type = cfg.POINT_EVENT if first_row.behavior_type == POINT else cfg.STATE_EVENT
+        self.pj[cfg.ETHOGRAM][_next_pj_key(self.pj[cfg.ETHOGRAM])] = {
+            "type": new_type,
+            "key": "",
+            "code": target,
+            "description": "",
+            "color": "",
+            "category": "",
+            "modifiers": "",
+            "excluded": "",
+            "coding map": "",
+        }
+        added_this_batch.add(target)
+        mapping[raw_label] = target
+        changed = True
+
+    if changed:
+        self.load_behaviors_in_twEthogram([entry[cfg.BEHAVIOR_CODE] for entry in self.pj[cfg.ETHOGRAM].values()])
+    return mapping
+
+
+def apply_subject_resolutions(self, resolutions: dict) -> dict:
+    """Same idea as apply_behavior_resolutions(), for self.pj[cfg.SUBJECTS]."""
+    mapping: dict = {}
+    added_this_batch: set = set()
+    changed = False
+    for raw_name, (action, target) in resolutions.items():
+        if action == "map":
+            mapping[raw_name] = target
+            continue
+
+        existing = match_subject_name(target, self.pj[cfg.SUBJECTS])
+        if existing is not None or target in added_this_batch:
+            mapping[raw_name] = existing or target
+            continue
+
+        self.pj[cfg.SUBJECTS][_next_pj_key(self.pj[cfg.SUBJECTS])] = {"key": "", "name": target, "description": ""}
+        added_this_batch.add(target)
+        mapping[raw_name] = target
+        changed = True
+
+    if changed:
+        self.load_subjects_in_twSubjects([entry[cfg.SUBJECT_NAME] for entry in self.pj[cfg.SUBJECTS].values()])
+    return mapping
+
+
 def import_model_outputs_activated(self) -> None:
     """Entry point for the "Import model outputs" button (FR-1..FR-6, FR-10..FR-12 happy path)."""
     if not self.observationId:
@@ -335,6 +441,36 @@ def import_model_outputs_activated(self) -> None:
         if answer != QMessageBox.StandardButton.Yes:
             return
 
+    behaviors_added: list = []
+    behaviors_mapped: list = []
+    unmatched_behaviors = unmatched_behavior_labels(rows, self.pj[cfg.ETHOGRAM])
+    if unmatched_behaviors:
+        dlg = import_mapping_dialog.MappingDialog(
+            "behavior", unmatched_behaviors, [e[cfg.BEHAVIOR_CODE] for e in self.pj[cfg.ETHOGRAM].values()]
+        )
+        if not dlg.exec_():
+            return
+        behavior_resolutions = dlg.get_resolutions()
+        mapping = apply_behavior_resolutions(self, behavior_resolutions, rows)
+        apply_behavior_mapping(rows, mapping)
+        for raw_label, (action, target) in behavior_resolutions.items():
+            (behaviors_added if action == "add" else behaviors_mapped).append(f"{raw_label!r} -> {mapping[raw_label]!r}")
+
+    subjects_added: list = []
+    subjects_mapped: list = []
+    unmatched_subjects = unmatched_subject_names(rows, self.pj[cfg.SUBJECTS])
+    if unmatched_subjects:
+        dlg = import_mapping_dialog.MappingDialog(
+            "subject", unmatched_subjects, [e[cfg.SUBJECT_NAME] for e in self.pj[cfg.SUBJECTS].values()]
+        )
+        if not dlg.exec_():
+            return
+        subject_resolutions = dlg.get_resolutions()
+        mapping = apply_subject_resolutions(self, subject_resolutions)
+        apply_subject_mapping(rows, mapping)
+        for raw_name, (action, target) in subject_resolutions.items():
+            (subjects_added if action == "add" else subjects_mapped).append(f"{raw_name!r} -> {mapping[raw_name]!r}")
+
     ethogram = self.pj[cfg.ETHOGRAM]
     subjects = self.pj[cfg.SUBJECTS]
 
@@ -362,6 +498,14 @@ def import_model_outputs_activated(self) -> None:
         summary.append(f"{plan.subject_free_count} loaded without a subject (no matching cat name in the CSV).")
     if ethogram_changed:
         summary.append(f"Updated ethogram type for: {', '.join(ethogram_changed)}.")
+    if behaviors_added:
+        summary.append(f"Added {len(behaviors_added)} new behavior(s): {', '.join(behaviors_added)}.")
+    if behaviors_mapped:
+        summary.append(f"Mapped {len(behaviors_mapped)} behavior label(s): {', '.join(behaviors_mapped)}.")
+    if subjects_added:
+        summary.append(f"Added {len(subjects_added)} new subject(s): {', '.join(subjects_added)}.")
+    if subjects_mapped:
+        summary.append(f"Mapped {len(subjects_mapped)} subject name(s): {', '.join(subjects_mapped)}.")
     if plan.skipped:
         summary.append(f"Skipped {len(plan.skipped)} row(s):")
         for skipped in plan.skipped[:10]:

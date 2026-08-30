@@ -102,7 +102,7 @@ New modules (naming follows the existing one-file-per-dialog convention, e.g. `s
 
 - `boris/model_import.py` — **built in M2.** CSV parsing (§3), observation-id filtering, behavior/subject auto-match logic, event-list construction (including START/STOP pairing), direct event insertion, orchestration of the workflow in §8. The parsing/matching functions are unit-tested without a running QApplication (NFR-4, `tests/test_model_import.py`).
 - `boris/import_conflict_dialog.py` — **built in M2** (not originally planned - see §2's behavior-type-conflict decision). `TypeConflictDialog`: per-behavior skip-vs-use-CSV-type choice.
-- `boris/import_mapping_dialog.py` — **still M3.** One reusable `QDialog` subclass for both the behavior map-or-add and subject map-or-add prompts (FR-4/FR-5 are structurally identical: mismatched labels in, existing-project-item-or-new choice out, many-to-one). Parameterize by "kind" (behavior vs. subject) rather than writing two near-identical dialogs.
+- `boris/import_mapping_dialog.py` — **built in M3.** One reusable `QDialog` subclass for both the behavior map-or-add and subject map-or-add prompts, parameterized by `kind`.
 - `boris/event_stamping.py` — the `tv_events` extensions for §7: subject→color hashing, row-coloring hook into `TableModel`, click/double-click handling wired onto `tv_events`.
 - Touch `boris/core.py` (toolbar button + `TableModel`/`tv_events` wiring), `boris/connections.py` (signal wiring), `boris/menu_options.py` (enable-state).
 
@@ -113,7 +113,7 @@ Test fixtures (NFR-4): [tests/files/test.boris](tests/files/test.boris) for stat
 (M0/M1 done — see [PROGRESS.md](PROGRESS.md).)
 
 - **M2 — Import happy path. Done.** Button + file picker; filter to active observation; case-insensitive auto-match for both behaviors and subjects (unmatched behavior → skipped + reported, unmatched subject → subject-free, no mapping prompts yet); overwrite warning; behavior-type conflict dialog (skip vs. use-CSV-type, see §2); direct event insertion (not `write_event`, see §4); unit tests for parser/matching/pairing/conflicts. Manual verification (app launch, actual click-through/render/save) is on the user — see NOTES.md §7a for touched files.
-- **M3 — Mapping / mismatch handling.** Behavior map-or-add and subject map-or-add dialogs, both many-to-one.
+- **M3 — Mapping / mismatch handling. Done.** One reusable `MappingDialog` for both behavior and subject map-or-add, both many-to-one (via either "map several labels to the same existing item" or "add several labels as the same new name"). 8 new unit tests, full suite re-run clean (same 36 pre-existing failures, no new ones). See NOTES.md §7b for touched files. Not yet manually click-tested by the user.
 - **M4 — Fast subject assignment.** §7 UX: active subject, click-to-stamp, double-click-unassign, keyboard, hash-derived color-coding. No assign-by-track yet (that's M5). Edit event verified still working.
 - **M5 — Unknown-cat / track-ID variant.** Once OQ-1 resolves: read the real track-ID column, carry it into comment/modifier (FR-7), add assign-by-track to the M4 UI.
 - **M6 — Pilot.** One real session end-to-end with actual coder feedback.

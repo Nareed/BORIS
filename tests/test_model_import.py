@@ -199,6 +199,89 @@ def test_build_import_plan_skip_resolution_drops_conflicting_rows():
     assert all("type conflict" in s.reason for s in result.skipped)
 
 
+# --- M3: unmatched-label finding, mapping rewrite, and project mutation -----------------------
+
+
+def test_unmatched_behavior_labels_and_subject_names():
+    rows = [
+        _row("Odin", "Sniff food outside", "START", "1.0"),
+        _row("Odin", "Sniff food outside", "STOP", "2.0"),
+        _row("Odin", "Sniffing food", "POINT", "3.0"),  # unmatched behavior
+        _row("Pagaille", "Lick", "POINT", "4.0"),  # unmatched subject
+        _row("", "Lick", "POINT", "5.0"),  # blank subject - not "unmatched", just subject-free
+    ]
+    assert mi.unmatched_behavior_labels(rows, ETHOGRAM) == ["Sniffing food"]
+    assert mi.unmatched_subject_names(rows, SUBJECTS) == ["Pagaille"]
+
+
+def test_apply_behavior_mapping_rewrites_rows_in_place():
+    rows = [_row("Odin", "Sniffing food", "POINT", "1.0")]
+    mi.apply_behavior_mapping(rows, {"Sniffing food": "Sniff food outside"})
+    assert rows[0].behavior_raw == "Sniff food outside"
+    assert mi.match_behavior_code(rows[0].behavior_raw, ETHOGRAM) == "Sniff food outside"
+
+
+def test_apply_subject_mapping_rewrites_rows_in_place():
+    rows = [_row("Pagaille", "Lick", "POINT", "1.0")]
+    mi.apply_subject_mapping(rows, {"Pagaille": "Odin"})
+    assert rows[0].subject_raw == "Odin"
+
+
+class _FakeMainWindow:
+    """Minimal stand-in for MainWindow: just .pj plus no-op UI refresh methods."""
+
+    def __init__(self, ethogram, subjects):
+        self.pj = {cfg.ETHOGRAM: dict(ethogram), cfg.SUBJECTS: dict(subjects)}
+
+    def load_behaviors_in_twEthogram(self, codes):
+        pass
+
+    def load_subjects_in_twSubjects(self, names):
+        pass
+
+
+def test_apply_behavior_resolutions_add_new():
+    fake = _FakeMainWindow(ETHOGRAM, SUBJECTS)
+    rows = [_row("Odin", "Zoomies", "POINT", "1.0")]
+    mapping = mi.apply_behavior_resolutions(fake, {"Zoomies": ("add", "Zoomies")}, rows)
+    assert mapping == {"Zoomies": "Zoomies"}
+    added = [e for e in fake.pj[cfg.ETHOGRAM].values() if e[cfg.BEHAVIOR_CODE] == "Zoomies"]
+    assert len(added) == 1
+    assert added[0]["type"] == cfg.POINT_EVENT  # inferred from the row's own Behavior type
+
+
+def test_apply_behavior_resolutions_map_to_existing():
+    fake = _FakeMainWindow(ETHOGRAM, SUBJECTS)
+    rows = [_row("Odin", "Sniffing food", "POINT", "1.0")]
+    mapping = mi.apply_behavior_resolutions(fake, {"Sniffing food": ("map", "Sniff food outside")}, rows)
+    assert mapping == {"Sniffing food": "Sniff food outside"}
+    # no new entries created
+    assert len(fake.pj[cfg.ETHOGRAM]) == len(ETHOGRAM)
+
+
+def test_apply_behavior_resolutions_many_to_one_via_same_new_name():
+    fake = _FakeMainWindow(ETHOGRAM, SUBJECTS)
+    rows = [
+        _row("Odin", "Zoomie", "POINT", "1.0"),
+        _row("Odin", "Zoomies!", "POINT", "2.0"),
+    ]
+    mapping = mi.apply_behavior_resolutions(
+        fake, {"Zoomie": ("add", "Zoomies"), "Zoomies!": ("add", "Zoomies")}, rows
+    )
+    assert mapping == {"Zoomie": "Zoomies", "Zoomies!": "Zoomies"}
+    # only ONE new ethogram entry was created, even though two different raw labels chose "add"
+    added = [e for e in fake.pj[cfg.ETHOGRAM].values() if e[cfg.BEHAVIOR_CODE] == "Zoomies"]
+    assert len(added) == 1
+
+
+def test_apply_subject_resolutions_add_and_many_to_one():
+    fake = _FakeMainWindow(ETHOGRAM, SUBJECTS)
+    mapping = mi.apply_subject_resolutions(fake, {"Pagaille": ("add", "Pagaille"), "pagaile (typo)": ("add", "Pagaille")})
+    assert mapping == {"Pagaille": "Pagaille", "pagaile (typo)": "Pagaille"}
+    added = [e for e in fake.pj[cfg.SUBJECTS].values() if e[cfg.SUBJECT_NAME] == "Pagaille"]
+    assert len(added) == 1
+
+
 def test_build_import_plan_use_csv_resolution_keeps_conflicting_rows():
     # caller is expected to have already updated the ethogram's type for "use_csv";
     # build_import_plan itself just stops skipping and pairs by the CSV's own markers

@@ -31,3 +31,20 @@
 - M3 (behavior/subject map-or-add for non-case/whitespace mismatches) not started — currently those rows are just skipped and reported.
 - `test-projects.boris` has zero observations; needs one created (matching the sample CSV's `Observation id`, e.g. `P26_20231010_FIT`) before the sample CSV can actually be imported into it.
 - 36 pre-existing test failures and the two stale PyQt5 test files, same as M0-M1.
+
+## 2026-08-30 — M2 fix + M3: map-or-add dialogs
+
+**What changed:**
+- User ran M2 end-to-end against their own real project/CSV/video (`manual-tests/`, not committed) and confirmed it works — events imported, rendered, and saved correctly. Two follow-ups from that test:
+  - Hit a real gap: the CSV's `Observation id` didn't match the BORIS observation's own name (independent naming schemes - one's the model pipeline's id, the other's whatever the coder typed). Fixed by implementing FR-10's "or prompt to choose" fallback (`distinct_observation_ids()` + a `QInputDialog` picker) instead of hard-erroring.
+  - Asked why imported events show `NA` in the Frame index column vs `0` for live-coded ones. Answer: that column is mpv's live `estimated_frame_number` at coding time, not derivable from Time during a bulk import - `NA` is the correct, honest value (matches BORIS's own sentinel); `0` would be actively wrong (falsely claims every event is at the video's first frame). Offered an optional `round(Time * FPS)` estimate; not requested yet.
+- Implemented M3: one reusable `MappingDialog` for both behavior and subject map-or-add (FR-4/FR-5), replacing the "skip and report" fallback for labels that don't match beyond case/whitespace. Many-to-one works two ways: map several labels to the same existing item, or add several as the same new name (detected and merged into one new ethogram/subject entry rather than duplicated). New ethogram entries get their type inferred from that label's own CSV rows.
+- 8 new unit tests (24 total in `tests/test_model_import.py`), all passing. Full suite re-run: same 36 pre-existing failures, no regressions. App launch re-verified.
+- Ticked M0/M1/M2 in the Notion page's Milestones checklist and added Progress log entries there mirroring this file.
+
+**Key files touched:** `boris/model_import.py`, `boris/import_mapping_dialog.py` (new), `NOTES.md`, `SPEC.md`.
+
+**Left open:**
+- M3's dialogs haven't been manually click-tested by the user yet (unit-tested only).
+- M4 (fast subject assignment UX) not started.
+- Same 36 pre-existing test failures, two stale PyQt5 test files, and OQ-1 (track-ID column) as before.
