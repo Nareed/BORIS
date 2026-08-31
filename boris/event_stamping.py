@@ -102,14 +102,18 @@ def colorize_subjects_table(self) -> None:
     legend" for the fast subject-assignment feature (SPEC.md §7), reusing the existing subjects
     dock rather than building a separate legend widget. Row 0 is always the "no focal subject"
     placeholder (see load_subjects_in_twSubjects) and stays uncolored.
+
+    Same two-tier fade as the events table (FADE_ALPHA while stamping mode is on, the fainter
+    FADE_ALPHA_OFF while it's off) - kept in sync with the toggle, not just a single fixed shade.
     """
     subject_names = [entry[cfg.SUBJECT_NAME] for entry in self.pj[cfg.SUBJECTS].values()]
+    alpha = FADE_ALPHA if self.tb_stamping_mode.isChecked() else FADE_ALPHA_OFF
     name_col = cfg.subjectsFields.index(cfg.SUBJECT_NAME)
     for row in range(1, self.twSubjects.rowCount()):
         name_item = self.twSubjects.item(row, name_col)
         if name_item is None:
             continue
-        color = subject_qcolor(name_item.text(), subject_names)
+        color = subject_qcolor(name_item.text(), subject_names, alpha=alpha)
         if color is None:
             continue
         for col in range(self.twSubjects.columnCount()):
@@ -132,6 +136,7 @@ def on_stamping_mode_toggled(self, checked: bool) -> None:
     if model is not None:
         model.stamping_mode_active = checked
         model.layoutChanged.emit()
+    colorize_subjects_table(self)
 
 
 def _apply_subject_to_selected_rows(self, subject: str) -> None:
