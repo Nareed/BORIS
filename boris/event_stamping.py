@@ -140,15 +140,34 @@ def on_stamping_mode_toggled(self, checked: bool) -> None:
 
 
 def _apply_subject_to_selected_rows(self, subject: str) -> None:
+    """
+    Update the subject in place - both the raw project events list (the actual source of truth,
+    used for saving/export) and the live TableModel's own backing list (self.event_state) - then
+    emit a scoped dataChanged instead of calling load_tw_events().
+
+    load_tw_events() rebuilds the whole model (setModel(None), then a brand-new TableModel) on
+    every call. That's fine for most callers, but doing it here breaks double-click detection: a
+    double-click's first press already fires `clicked` (on_tv_events_clicked, which stamps), and
+    swapping the model out from under Qt mid-gesture invalidates the item identity Qt uses to
+    recognize the second press as completing a double-click on the *same* row - so doubleClicked
+    never fires, and only the click-half (assign) is ever seen. Mutating in place avoids that
+    entirely, and is cheaper besides.
+    """
     selected_rows = {index.row() for index in self.tv_events.selectionModel().selectedIndexes()}
     if not selected_rows:
         return
     events = self.pj[cfg.OBSERVATIONS][self.observationId][cfg.EVENTS]
+    model = self.tv_events.model()
     for view_row in selected_rows:
         event_idx = self.tv_idx2events_idx[view_row]
         events[event_idx][cfg.EVENT_SUBJECT_FIELD_IDX] = subject
-    self.load_tw_events(self.observationId)
+        if model is not None:
+            model._data[view_row][cfg.EVENT_SUBJECT_FIELD_IDX] = subject
     self.project_changed()
+    if model is not None:
+        top_left = model.index(min(selected_rows), 0)
+        bottom_right = model.index(max(selected_rows), model.columnCount() - 1)
+        model.dataChanged.emit(top_left, bottom_right)
 
 
 def on_tv_events_clicked(self) -> None:
