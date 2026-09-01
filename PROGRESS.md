@@ -99,3 +99,11 @@
 **Key files touched:** `boris/import_mapping_dialog.py`, `boris/import_conflict_dialog.py`, `boris/event_stamping.py`, `NOTES.md`.
 
 **Left open:** the color legend itself still has no explicit on-screen text explaining what it's for (flagged, not fixed); not yet manually re-tested by the user; same test debt as before.
+
+## 2026-08-31 — Mapping dialog: collapse to a context-sensitive target column
+
+**What changed:** user found the 4-column table version too wide, and confusing in a new way - a disabled but still-populated "map to existing" combo or pre-filled "new name" field showing next to "Skip" made no sense. Collapsed both into one `QStackedWidget` per row (3 columns total) that swaps to show only what's relevant to the chosen action: nothing for Skip, the existing-item combo for Map, the new-name field for Add. Full suite re-run clean, app launch re-verified.
+
+**Key files touched:** `boris/import_mapping_dialog.py`, `NOTES.md`.
+
+**Left open:** not yet manually re-tested by the user; same test debt as before.

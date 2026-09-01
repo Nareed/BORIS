@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QHeaderView,
+    QStackedWidget,
 )
 
 from . import config as cfg
@@ -39,6 +40,8 @@ from . import config as cfg
 ACTION_SKIP = "Skip"
 ACTION_MAP = "Map to existing"
 ACTION_ADD = "Add as new"
+
+_PAGE_SKIP, _PAGE_MAP, _PAGE_ADD = 0, 1, 2
 
 
 class MappingDialog(QDialog):
@@ -53,6 +56,11 @@ class MappingDialog(QDialog):
     not BORIS-native) found that ambiguous: it wasn't clear which names came from the CSV/model
     and which were already in the project. Column headers say so directly instead.
 
+    The "target" (existing-item combo vs. new-name field) is a single QStackedWidget per row that
+    swaps to match the chosen action, rather than two always-visible columns - showing a stale
+    existing-item name or pre-filled new-name text next to "Skip" made no sense and just added
+    width/clutter for information that wasn't relevant to that row's choice.
+
     Skip is the default action for every row (not "add as new"): declining to resolve a label
     should never silently mutate the project just because the coder didn't touch a row. A skipped
     behavior label is dropped (its rows are excluded, same as an unmatched label in M2); a skipped
@@ -64,6 +72,7 @@ class MappingDialog(QDialog):
         self.setWindowTitle(cfg.programName)
         self.setWindowFlags(Qt.WindowStaysOnTopHint)
         self._labels = list(unmatched_labels)
+        self._stacks: list = []  # one QStackedWidget per row, indexed like self._labels
 
         noun = "behavior" if kind == "behavior" else "subject"
         skip_consequence = "those rows are dropped" if kind == "behavior" else "those events load without a subject"
@@ -79,15 +88,8 @@ class MappingDialog(QDialog):
             )
         )
 
-        self.table = QTableWidget(len(self._labels), 4)
-        self.table.setHorizontalHeaderLabels(
-            [
-                "From the model's CSV",
-                "Action",
-                f"This project's existing {noun}s",
-                "New name (if adding)",
-            ]
-        )
+        self.table = QTableWidget(len(self._labels), 3)
+        self.table.setHorizontalHeaderLabels(["From the model's CSV", "Action", "Target"])
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
@@ -102,19 +104,19 @@ class MappingDialog(QDialog):
             action_combo.addItems(action_items)
             self.table.setCellWidget(row, 1, action_combo)
 
+            stack = QStackedWidget()
+            stack.insertWidget(_PAGE_SKIP, QLabel("(not needed)"))
             map_combo = QComboBox()
             map_combo.addItems(sorted_items)
-            map_combo.setEnabled(False)
-            self.table.setCellWidget(row, 2, map_combo)
-
+            stack.insertWidget(_PAGE_MAP, map_combo)
             new_name_edit = QLineEdit(label)
-            new_name_edit.setEnabled(False)
-            self.table.setCellWidget(row, 3, new_name_edit)
+            stack.insertWidget(_PAGE_ADD, new_name_edit)
+            stack.setCurrentIndex(_PAGE_SKIP)
+            self.table.setCellWidget(row, 2, stack)
+            self._stacks.append(stack)
 
-            def _on_action_change(_index, action_combo=action_combo, map_combo=map_combo, new_name_edit=new_name_edit):
-                action = action_combo.currentText()
-                map_combo.setEnabled(action == ACTION_MAP)
-                new_name_edit.setEnabled(action == ACTION_ADD)
+            def _on_action_change(_index, action_combo=action_combo, stack=stack):
+                stack.setCurrentIndex({ACTION_SKIP: _PAGE_SKIP, ACTION_MAP: _PAGE_MAP, ACTION_ADD: _PAGE_ADD}[action_combo.currentText()])
 
             action_combo.currentIndexChanged.connect(_on_action_change)
 
@@ -130,7 +132,7 @@ class MappingDialog(QDialog):
         layout.addLayout(buttons_layout)
 
         self.setLayout(layout)
-        self.resize(720, min(120 + 40 * len(self._labels), 600))
+        self.resize(600, min(100 + 36 * len(self._labels), 520))
 
     def get_resolutions(self) -> dict:
         """{raw_label: ("map", existing_item) | ("add", new_name) | ("skip", None)}"""
@@ -140,8 +142,9 @@ class MappingDialog(QDialog):
             if action == ACTION_SKIP:
                 resolutions[label] = ("skip", None)
             elif action == ACTION_ADD:
-                new_name = self.table.cellWidget(row, 3).text().strip() or label
-                resolutions[label] = ("add", new_name)
+                new_name_edit: QLineEdit = self._stacks[row].widget(_PAGE_ADD)
+                resolutions[label] = ("add", new_name_edit.text().strip() or label)
             else:  # ACTION_MAP
-                resolutions[label] = ("map", self.table.cellWidget(row, 2).currentText())
+                map_combo: QComboBox = self._stacks[row].widget(_PAGE_MAP)
+                resolutions[label] = ("map", map_combo.currentText())
         return resolutions
