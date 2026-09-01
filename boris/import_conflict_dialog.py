@@ -57,6 +57,12 @@ class TypeConflictDialog(QDialog):
             )
         )
 
+        # conflict.csv_type is the internal "STATE"/"POINT" category, not BORIS's own ethogram
+        # wording ("State event"/"Point event") - showing the raw internal string next to the
+        # properly-worded project type read as inconsistent/confusing; normalize both to the
+        # same vocabulary so the two options are easy to compare at a glance.
+        csv_type_label = {"STATE": "State event", "POINT": "Point event"}
+
         for code, conflict in conflicts.items():
             frame = QFrame()
             frame.setFrameShape(QFrame.Shape.StyledPanel)
@@ -64,8 +70,11 @@ class TypeConflictDialog(QDialog):
             v.addWidget(QLabel(f"<b>{code}</b> - {conflict.row_count} row(s)"))
 
             group = QButtonGroup(self)
-            project_rb = QRadioButton(f"Keep project type ({conflict.ethogram_type}) - skip these rows")
-            csv_rb = QRadioButton(f"Use CSV type ({conflict.csv_type}) - update the ethogram and import")
+            project_rb = QRadioButton(f"Keep this project's current type ({conflict.ethogram_type}) - skip these rows")
+            csv_rb = QRadioButton(
+                f"Use the model's CSV type ({csv_type_label.get(conflict.csv_type, conflict.csv_type)}) - "
+                "update the ethogram and import"
+            )
             project_rb.setChecked(True)
             group.addButton(project_rb, 0)
             group.addButton(csv_rb, 1)

@@ -88,3 +88,14 @@
 **Key files touched:** `boris/event_stamping.py`, `boris/core.py`, `NOTES.md`.
 
 **Left open:** not yet manually verified by the user; assign-by-track is M5 (blocked on OQ-1 - see next entry); same 36 pre-existing test failures, two stale PyQt5 test files.
+
+## 2026-08-31 — Usability pass (non-BORIS-native feedback)
+
+**What changed:**
+- User got feedback that the mapping dialog didn't make clear which names came from the CSV/model vs. the project's own ethogram/subjects. Rebuilt `MappingDialog` as a `QTableWidget` with explicit column headers labeling the source of each name, and a dedicated `Action` combo (Skip/Map to existing/Add as new) instead of one flat combo mixing sentinels with real project items.
+- Reviewed the rest of the import/mapping/stamping flow for similar confusion. Fixed two more: `TypeConflictDialog` showed inconsistent terminology (raw "STATE"/"POINT" next to properly-worded "State event"/"Point event") - normalized. Clicking to stamp with no focal subject silently did nothing - now shows a status-bar hint, and turning Stamping mode on shows an up-front reminder of the workflow.
+- Full suite re-run clean, app launch re-verified.
+
+**Key files touched:** `boris/import_mapping_dialog.py`, `boris/import_conflict_dialog.py`, `boris/event_stamping.py`, `NOTES.md`.
+
+**Left open:** the color legend itself still has no explicit on-screen text explaining what it's for (flagged, not fixed); not yet manually re-tested by the user; same test debt as before.

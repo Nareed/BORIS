@@ -132,6 +132,10 @@ def on_stamping_mode_toggled(self, checked: bool) -> None:
     """
     self.tb_stamping_mode.setText(f"Stamping mode: {'ON' if checked else 'OFF'}")
     self.tb_stamping_mode.setStyleSheet(STAMPING_ON_STYLE if checked else BASE_BUTTON_STYLE)
+    if checked:
+        self.statusBar().showMessage(
+            "Stamping mode on: select a focal subject, then click an event to assign it (double-click to unassign)", 8000
+        )
     model = self.tv_events.model()
     if model is not None:
         model.stamping_mode_active = checked
@@ -185,6 +189,10 @@ def on_tv_events_clicked(self) -> None:
     if not self.tb_stamping_mode.isChecked():
         return
     if not self.currentSubject:
+        # a click here silently did nothing before - confusing, since there's no other feedback
+        # that a focal subject is required first. Matches the statusBar().showMessage(...) pattern
+        # used elsewhere in the app for this kind of transient hint (e.g. behav_coding_map_creator.py).
+        self.statusBar().showMessage("Select a focal subject first (click one in the Subjects list, or press its key) to stamp events", 5000)
         return
     _apply_subject_to_selected_rows(self, self.currentSubject)
 
