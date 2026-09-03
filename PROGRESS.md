@@ -107,3 +107,11 @@
 **Key files touched:** `boris/import_mapping_dialog.py`, `NOTES.md`.
 
 **Left open:** not yet manually re-tested by the user; same test debt as before.
+
+## 2026-09-03 — Distribution: Windows installer for non-technical end users
+
+**What changed:** the target users download BORIS from the official page, not git - discussed distribution strategy, then built it. Rebranded to "T4A-BORIS" (`boris/config.py` `programName`, propagates through nearly every dialog title in the app) so fork-only bugs don't land on the real BORIS maintainers. Neutralized `actionCheckUpdate_activated()` in `boris/core.py` - upstream's update flow downloads and copies upstream's own source over the running install, which would silently wipe this fork's features; disabled at the function level (covers both the manual menu click and the built-in 15-day auto-check) and hid the now-inert menu item. Adapted upstream's own `windows_deployment.ps1` into `scripts/deployment/t4a_boris_windows_deployment.ps1` (installs this fork instead of the public PyPI package; installs from a built wheel instead of the source dir after hitting a real setuptools flat-layout package-discovery failure; non-blocking smoke test instead of upstream's blocking one). Wrote `scripts/deployment/t4a_boris_installer.iss` (Inno Setup) to wrap the result into a real `Setup.exe` - Start Menu entry, Desktop icon, uninstaller, no Python/git ever visible. Installed Inno Setup 6 via winget, built and smoke-tested a wheel from this exact branch, compiled `T4A-BORIS-9.14-setup.exe` (163MB), handed it to the user directly (not committed - reproducible build artifact).
+
+**Key files touched:** `boris/config.py`, `boris/core.py`, `scripts/deployment/t4a_boris_windows_deployment.ps1` (new), `scripts/deployment/t4a_boris_installer.iss` (new), `NOTES.md`.
+
+**Left open:** the installer itself hasn't been run yet - needs the user's interactive UAC approval, which nothing automated can provide. No custom `.ico`, no code-signing (expect a SmartScreen warning on first run - normal for unsigned installers), no macOS/Linux build.
