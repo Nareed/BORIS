@@ -20,7 +20,7 @@ This file is part of BORIS.
 
 """
 
-programName: str = "BORIS"
+programName: str = "T4A-BORIS"
 
 # socket for MPV IPC mode
 MPV_SOCKET = "/tmp/mpvsocket"

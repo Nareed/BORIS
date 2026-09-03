@@ -41,7 +41,6 @@ import subprocess
 import tempfile
 import time
 import urllib.request
-import zipfile
 from collections import deque
 from decimal import ROUND_DOWN
 from decimal import Decimal as dec
@@ -71,6 +70,7 @@ from PySide6.QtWidgets import (
     QSplashScreen,
     QStyledItemDelegate,
     QTableWidgetItem,
+    QToolButton,
 )
 
 from . import cmd_arguments
@@ -98,9 +98,11 @@ from . import (
     core_qrc,
     dialog,
     event_operations,
+    event_stamping,
     events_cursor,
     geometric_measurement,
     gui_utilities,
+    model_import,
     modifier_coding_map_creator,
     modifiers_coding_map,
     observation_operations,
@@ -168,12 +170,16 @@ class TableModel(QAbstractTableModel):
     class for populating table view with events
     """
 
-    def __init__(self, data, header: list, time_format: str, observation_type: str, parent=None):
+    def __init__(
+        self, data, header: list, time_format: str, observation_type: str, subject_names=None, stamping_mode_active=False, parent=None
+    ):
         super(TableModel, self).__init__(parent)
         self._data = data
         self.header = header
         self.time_format = time_format
         self.observation_type = observation_type
+        self.subject_names = subject_names or []
+        self.stamping_mode_active = stamping_mode_active
 
     def headerData(self, section: int, orientation: Qt.Orientation, role: int):
         if role == Qt.ItemDataRole.DisplayRole:
@@ -202,6 +208,12 @@ class TableModel(QAbstractTableModel):
                         return util.convertTime(self.time_format, self._data[row][event_idx])
                     elif column < self.columnCount():
                         return self._data[row][event_idx]
+        elif role == Qt.ItemDataRole.BackgroundRole:
+            row = index.row()
+            if 0 <= row < self.rowCount():
+                subject_idx = cfg.PJ_OBS_FIELDS[self.observation_type][cfg.SUBJECT]
+                alpha = event_stamping.FADE_ALPHA if self.stamping_mode_active else event_stamping.FADE_ALPHA_OFF
+                return event_stamping.subject_qcolor(self._data[row][subject_idx], self.subject_names, alpha=alpha)
 
 
 class MainWindow(QMainWindow, Ui_MainWindow):
@@ -373,6 +385,29 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.add_button_menu(behavior_button_items, self.menu)
         self.tb_export.setMenu(self.menu)
         """
+
+        # T4A-BORIS: hide the now-inert "Check for updates" menu item (actionCheckUpdate_activated
+        # is neutralized - see that method - since upstream's flow would overwrite this fork).
+        self.actionCheckUpdate.setVisible(False)
+
+        self.tb_import_model_outputs = QToolButton()
+        self.tb_import_model_outputs.setText("Import model outputs")
+        self.tb_import_model_outputs.setToolTip("Import a BORIS tabular events CSV produced by a detection model")
+        self.tb_import_model_outputs.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.tb_import_model_outputs.setStyleSheet(event_stamping.BASE_BUTTON_STYLE)
+        self.toolBar.addWidget(self.tb_import_model_outputs)
+
+        self.tb_stamping_mode = QToolButton()
+        self.tb_stamping_mode.setText("Stamping mode: OFF")
+        self.tb_stamping_mode.setCheckable(True)
+        self.tb_stamping_mode.setToolTip(
+            "While on: click an event (or a multi-selection) to assign it to the focal subject; "
+            "double-click to unassign. While off, the events table behaves as usual "
+            "(click selects, double-click seeks the video)."
+        )
+        self.tb_stamping_mode.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.tb_stamping_mode.setStyleSheet(event_stamping.BASE_BUTTON_STYLE)
+        self.toolBar.addWidget(self.tb_stamping_mode)
 
         gui_utilities.set_icons(self, theme_mode=gui_utilities.theme_mode())
 
@@ -1318,82 +1353,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def actionCheckUpdate_activated(self, flagMsgOnlyIfNew=False):
         """
-        check BORIS web site for updates
-        ask user for updating
+        Disabled in this fork (T4A-BORIS): the upstream update flow points at boris.unito.it and
+        downloads/copies-over the upstream *source* zip in place, which would silently overwrite
+        this fork's modifications with vanilla BORIS. Neutralized here (rather than only hiding
+        the menu action) so it's inert regardless of trigger path - manual click, or the
+        every-15-days auto-check in config_file.py, which calls this exact function.
         """
-
-        version_URL = "https://www.boris.unito.it/static/ver4.dat"
-        try:
-            last_version = urllib.request.urlopen(version_URL).read().strip().decode("utf-8")
-        except Exception:
-            QMessageBox.warning(self, cfg.programName, "Can not check for updates. Check your connection.")
-            return
-
-        # record check timestamp
-        config_file.save(self, lastCheckForNewVersion=int(time.mktime(time.localtime())))
-
-        if util.versiontuple(last_version) > util.versiontuple(__version__):
-            if (
-                dialog.MessageDialog(
-                    cfg.programName,
-                    (
-                        f"A new version is available: v. {last_version}.<br><br>"
-                        'For updating manually go to <a href="https://www.boris.unito.it">https://www.boris.unito.it</a>.<br>'
-                    ),
-                    (cfg.CANCEL, "Update automatically"),
-                )
-                == cfg.CANCEL
-            ):
-                return
-
-        else:
-            msg = f"The version you are using is the last one: <b>{__version__}</b>"
-            QMessageBox.information(self, cfg.programName, msg)
-
-            # any news?
-            newsURL = "https://www.boris.unito.it/static/news.dat"
-            news = urllib.request.urlopen(newsURL).read().strip().decode("utf-8")
-            if news:
-                QMessageBox.information(self, cfg.programName, news)
-            return
-
-        # check if a .git is present
-        if (Path(__file__).parent.parent / Path(".git")).is_dir():
-            QMessageBox.critical(self, cfg.programName, "A .git directory is present, BORIS cannot be automatically updated.")
-            return
-
-        # download zip archive
-        try:
-            zip_content = urllib.request.urlopen(f"https://github.com/olivierfriard/BORIS/archive/refs/tags/v{last_version}.zip").read()
-        except Exception:
-            QMessageBox.critical(self, cfg.programName, "Cannot download the new version")
-            return
-
-        temp_zip = tempfile.NamedTemporaryFile(suffix=".zip")
-        try:
-            with open(temp_zip.name, "wb") as f_out:
-                f_out.write(zip_content)
-        except Exception as e:
-            QMessageBox.critical(self, cfg.programName, f"A problem occurred during saving the new version of BORIS.: {e}")
-            return
-
-        # extract to temp dir
-        try:
-            temp_dir = tempfile.TemporaryDirectory()
-            with zipfile.ZipFile(temp_zip.name, "r") as zip_ref:
-                zip_ref.extractall(temp_dir.name)
-        except Exception:
-            QMessageBox.critical(self, cfg.programName, "A problem occurred during the unzip of the new version.")
-            return
-
-        # copy from temp dir to current BORIS dir
-        try:
-            shutil.copytree(f"{temp_dir.name}/BORIS-{last_version}", Path(__file__).parent.parent, dirs_exist_ok=True)
-        except Exception:
-            QMessageBox.critical(self, cfg.programName, "A problem occurred during the copy the new version of BORIS.")
-            return
-
-        QMessageBox.information(self, cfg.programName, f"BORIS was updated to v. {last_version}. Restart the program to apply the changes.")
+        if not flagMsgOnlyIfNew:
+            QMessageBox.information(
+                self,
+                cfg.programName,
+                "Automatic updates are disabled for T4A-BORIS. Contact your team for update instructions.",
+            )
 
     def seek_mediaplayer(self, new_time: dec, player: int = 0) -> int | None:
         """
@@ -2303,6 +2274,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             header,
             time_format,
             self.playerType,
+            [entry[cfg.SUBJECT_NAME] for entry in self.pj[cfg.SUBJECTS].values()],
+            self.tb_stamping_mode.isChecked(),
             self.tv_events,
         )
         self.tv_events.setModel(model)
@@ -4519,6 +4492,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                         len(cfg.subjectsFields),
                         QTableWidgetItem(""),
                     )
+
+        # color legend for the fast subject-assignment feature (SPEC.md §7)
+        event_stamping.colorize_subjects_table(self)
 
     # def update_events_start_stop(self) -> None:
     #    """

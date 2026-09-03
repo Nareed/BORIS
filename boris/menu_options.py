@@ -140,6 +140,9 @@ def update_menu(self):
     ):
         action.setEnabled(observation_is_active)
 
+    self.tb_import_model_outputs.setEnabled(observation_is_active)
+    self.tb_stamping_mode.setEnabled(observation_is_active)
+
     # enabled if media observation
     for action in (
         self.actionMedia_file_information,

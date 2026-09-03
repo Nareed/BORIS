@@ -30,6 +30,7 @@ from . import (
     coding_pad,
     cooccurence,
     event_operations,
+    event_stamping,
     events_snapshots,
     export_events,
     external_processes,
@@ -39,6 +40,7 @@ from . import (
     irr,
     latency,
     media_file,
+    model_import,
     observation_operations,
     preferences,
     project_functions,
@@ -93,6 +95,9 @@ def connections(self):
 
     self.action_create_observations.triggered.connect(lambda: observation_operations.create_observations(self))
     self.actionRemove_observations.triggered.connect(lambda: observation_operations.remove_observations(self))
+
+    self.tb_import_model_outputs.clicked.connect(lambda: model_import.import_model_outputs_activated(self))
+    self.tb_stamping_mode.toggled.connect(lambda checked: event_stamping.on_stamping_mode_toggled(self, checked))
 
     self.actionAdd_event.triggered.connect(lambda: event_operations.add_event(self))
     self.actionEdit_event.triggered.connect(lambda: event_operations.edit_event(self))
@@ -268,7 +273,8 @@ def connections(self):
     self.twSubjects.itemDoubleClicked.connect(self.twSubjects_doubleClicked)
 
     # events tableview
-    self.tv_events.doubleClicked.connect(self.tv_events_doubleClicked)
+    self.tv_events.doubleClicked.connect(lambda: event_stamping.on_tv_events_double_clicked(self))
+    self.tv_events.clicked.connect(lambda: event_stamping.on_tv_events_clicked(self))
 
     # Actions for twEthogram context menu
     self.twEthogram.setContextMenuPolicy(Qt.ContextMenuPolicy.ActionsContextMenu)
