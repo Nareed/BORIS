@@ -15,7 +15,13 @@
 
 param(
     [string]$Source = (Resolve-Path "$PSScriptRoot\..\..").Path,
-    [string]$AppName = "T4A-BORIS"
+    [string]$AppName = "T4A-BORIS",
+    # libmpv-2.dll + ffmpeg.exe + ffprobe.exe: BORIS auto-downloads these on first run if
+    # missing (see boris/utilities.py) - showing an "MPV library was not found, downloading..."
+    # dialog and a real wait, and needing internet access, the moment a non-technical end user
+    # first opens the app. Pre-bundling them (copied from a local checkout that's already run
+    # BORIS once, so they exist at boris/misc/) means that first-run download never triggers.
+    [string]$MiscSourceDir = (Join-Path (Resolve-Path "$PSScriptRoot\..\..").Path "boris\misc")
 )
 
 $Url = "https://github.com/astral-sh/python-build-standalone/releases/download/20251014/cpython-3.13.9+20251014-x86_64-pc-windows-msvc-install_only_stripped.tar.gz"
@@ -67,6 +73,24 @@ if ($Source -like "git+*" -or $Source -like "http*") {
     if (-not $Wheel) { Write-Error "No wheel produced by uv build"; exit 1 }
     Write-Host "Installing wheel: $($Wheel.Name)"
     & "$($PythonExe.FullName)" -m pip install "$($Wheel.FullName)"
+}
+
+# Pre-bundle libmpv/ffmpeg/ffprobe so the app never needs to auto-download them on first run.
+# They land in <bundle>\python\Lib\site-packages\boris\misc\ - the exact path
+# Path(__file__).parent / "misc" resolves to once boris is installed there (utilities.py), and
+# core.py already prepends that directory to PATH before anything imports it, so simply having
+# the files present is enough - no code change needed, just getting them there before first launch.
+$BorisMiscDir = Join-Path $ExtractPath "python\Lib\site-packages\boris\misc"
+$RequiredMiscFiles = @("libmpv-2.dll", "ffmpeg.exe", "ffprobe.exe")
+$MissingMiscFiles = $RequiredMiscFiles | Where-Object { -not (Test-Path (Join-Path $MiscSourceDir $_)) }
+if ($MissingMiscFiles) {
+    Write-Error "Missing from ${MiscSourceDir}: $($MissingMiscFiles -join ', '). Run BORIS once from a dev checkout first so it auto-downloads them, or pass -MiscSourceDir pointing at a folder that already has them."
+    exit 1
+}
+Write-Host "Bundling libmpv/ffmpeg/ffprobe from $MiscSourceDir (no first-run download needed)..."
+New-Item -ItemType Directory -Force -Path $BorisMiscDir | Out-Null
+foreach ($f in $RequiredMiscFiles) {
+    Copy-Item -Path (Join-Path $MiscSourceDir $f) -Destination $BorisMiscDir -Force
 }
 
 # Strip unused files/plugins (same trims as upstream's script - smaller bundle, faster install)
